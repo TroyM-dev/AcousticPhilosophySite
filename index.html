@@ -495,7 +495,7 @@ textarea{min-height:110px;resize:vertical}
           </div>
           <label for="f-music">What do you listen to?<textarea id="f-music" name="music" placeholder="e.g. Chamber music, vocal jazz, vinyl collection"></textarea></label>
           <div><button class="btn solid" type="submit">Request a session</button></div>
-          <p class="form-note" id="form-msg" aria-live="polite">Website preview: requests are not sent yet.</p>
+          <p class="form-note" id="form-msg" aria-live="polite"></p>
         </form>
       </div>
     </div>
@@ -543,16 +543,41 @@ textarea{min-height:110px;resize:vertical}
   });
 })();
 
-// Booking form: preview only, nothing is sent
+// Booking form: stores the request in the site's inquiries inbox
 (function(){
   var f=document.getElementById('listen-form'), msg=document.getElementById('form-msg');
   if(!f) return;
+  var btn=f.querySelector('button[type="submit"]');
   f.addEventListener('submit',function(e){
     e.preventDefault();
     var n=document.getElementById('f-name'), m=document.getElementById('f-email');
-    if(!n.value.trim()||!m.value.trim()||!m.checkValidity()){msg.textContent='Add your name and a valid email address to continue.';return;}
-    msg.className='form-done';
-    msg.textContent='Thank you, '+n.value.trim().split(' ')[0]+'. This is a website preview, so your request has not been sent. Once launched, this form will reach the Acoustic Philosophy team.';
+    if(!n.value.trim()||!m.value.trim()||!m.checkValidity()){
+      msg.className='form-note';
+      msg.textContent='Add your name and a valid email address to continue.';
+      return;
+    }
+    var payload={
+      name:n.value.trim(),
+      email:m.value.trim(),
+      city:document.getElementById('f-city').value.trim(),
+      type:document.getElementById('f-type').value,
+      music:document.getElementById('f-music').value.trim()
+    };
+    btn.disabled=true;
+    msg.className='form-note';
+    msg.textContent='Sending…';
+    fetch('/api/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(){
+        f.reset();
+        msg.className='form-done';
+        msg.textContent='Thank you, '+payload.name.split(' ')[0]+'. Your request has been received — we will be in touch shortly.';
+      })
+      .catch(function(){
+        msg.className='form-note';
+        msg.textContent='Sorry, your request could not be sent. Please try again.';
+      })
+      .then(function(){ btn.disabled=false; });
   });
 })();
 </script>

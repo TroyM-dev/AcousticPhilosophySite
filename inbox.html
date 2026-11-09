@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Inquiries — Acoustic Philosophy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600&family=Libre+Baskerville:ital@0;1&display=swap">
+<style>
+:root{
+  --ink:#0f0e10;--panel:#18171a;--line:#2d2b2f;--fg:#ecebe7;--muted:#a3a09b;--copper:#c47f4c;
+  --f-display:"Libre Baskerville","Baskerville",Georgia,serif;--f-body:"Hanken Grotesk","Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink);color:var(--fg);font-family:var(--f-body);line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto;padding:48px 20px 72px}
+a{color:var(--copper)}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(1.8rem,4vw,2.4rem);margin:0 0 8px}
+.sub{color:var(--muted);margin:0 0 32px}
+.panel{background:var(--panel);border:1px solid var(--line);padding:20px;margin-bottom:24px}
+label{display:block;font-size:.75rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+input{width:100%;font:inherit;color:var(--fg);background:var(--ink);border:1px solid var(--line);padding:12px 14px}
+input:focus{outline:none;border-color:var(--copper)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row input{flex:1 1 220px}
+button{font:inherit;font-weight:500;letter-spacing:.06em;text-transform:uppercase;font-size:.85rem;padding:12px 20px;cursor:pointer;background:var(--copper);color:#140d08;border:1px solid var(--copper)}
+button.ghost{background:transparent;color:var(--fg);border-color:#ffffff55}
+button:disabled{opacity:.5;cursor:default}
+#status{min-height:1.5em;color:var(--muted);font-size:.9rem;margin-top:14px}
+.item{border:1px solid var(--line);border-left:2px solid var(--copper);padding:18px 20px;margin-bottom:14px;background:var(--panel)}
+.who{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between}
+.who strong{font-weight:600}
+.meta{font-size:.85rem;color:var(--muted);margin-top:6px}
+.type{display:inline-block;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--copper);border:1px solid var(--copper);padding:2px 8px;margin-top:10px}
+.msg{margin-top:12px;white-space:pre-wrap;color:var(--fg)}
+.empty{color:var(--muted)}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Inquiries</h1>
+  <p class="sub">Requests saved from the contact form.</p>
+
+  <form class="panel" id="gate">
+    <label for="key">Inbox passcode</label>
+    <div class="row">
+      <input id="key" type="password" autocomplete="current-password" required>
+      <button type="submit">Open inbox</button>
+      <button type="button" class="ghost" id="refresh" hidden>Refresh</button>
+    </div>
+    <p id="status" aria-live="polite"></p>
+  </form>
+
+  <div id="list"></div>
+</main>
+
+<script>
+(function(){
+  var gate=document.getElementById('gate'), keyInput=document.getElementById('key'),
+      status=document.getElementById('status'), list=document.getElementById('list'),
+      refresh=document.getElementById('refresh'), passcode='';
+
+  function setStatus(text){ status.textContent=text; }
+
+  function formatDate(iso){
+    var d=new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
+  }
+
+  function render(messages){
+    list.textContent='';
+    if(!messages.length){
+      var empty=document.createElement('p');
+      empty.className='empty';
+      empty.textContent='No requests yet.';
+      list.appendChild(empty);
+      return;
+    }
+    messages.forEach(function(m){
+      var item=document.createElement('article'); item.className='item';
+      var who=document.createElement('div'); who.className='who';
+      var name=document.createElement('strong'); name.textContent=m.name || 'Unnamed';
+      var when=document.createElement('span'); when.className='meta'; when.textContent=formatDate(m.createdAt);
+      who.appendChild(name); who.appendChild(when);
+      item.appendChild(who);
+
+      var contact=document.createElement('div'); contact.className='meta';
+      var mail=document.createElement('a'); mail.href='mailto:'+m.email; mail.textContent=m.email;
+      contact.appendChild(mail);
+      if(m.city){ contact.appendChild(document.createTextNode(' · ' + m.city)); }
+      item.appendChild(contact);
+
+      if(m.type){ var type=document.createElement('span'); type.className='type'; type.textContent=m.type; item.appendChild(type); }
+
+      if(m.music){ var msg=document.createElement('p'); msg.className='msg'; msg.textContent=m.music; item.appendChild(msg); }
+      list.appendChild(item);
+    });
+  }
+
+  function load(){
+    if(!passcode) return;
+    setStatus('Loading…');
+    fetch('/api/messages',{headers:{'X-Inbox-Key':passcode}})
+      .then(function(r){
+        if(r.status===401) throw new Error('Wrong passcode.');
+        if(r.status===503) throw new Error('No passcode is configured yet. Add INBOX_KEY in the app secrets, then reload.');
+        if(!r.ok) throw new Error('Could not load requests ('+r.status+').');
+        return r.json();
+      })
+      .then(function(data){
+        render(data.messages || []);
+        setStatus((data.messages||[]).length+' request'+((data.messages||[]).length===1?'':'s')+' saved.');
+        refresh.hidden=false;
+        gate.querySelector('button[type="submit"]').textContent='Change passcode';
+      })
+      .catch(function(err){
+        list.textContent='';
+        setStatus(err.message);
+        refresh.hidden=true;
+      });
+  }
+
+  gate.addEventListener('submit',function(e){
+    e.preventDefault();
+    passcode=keyInput.value;
+    if(!passcode.trim()){ setStatus('Enter the passcode.'); return; }
+    sessionStorage.setItem('ap-inbox-key',passcode);
+    keyInput.value=passcode;
+    load();
+  });
+
+  refresh.addEventListener('click',load);
+
+  var saved=sessionStorage.getItem('ap-inbox-key');
+  if(saved){ passcode=saved; keyInput.value=saved; load(); }
+  else { setStatus('Enter the passcode you set for this inbox.'); }
+})();
+</script>
+</body>
+</html>
